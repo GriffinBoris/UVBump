@@ -69,23 +69,19 @@ ignore = [
 ]
 
 [tool.ruff.lint.isort]
-known-third-party = [
-
-]
 known-first-party = [
-
+    "core",
 ]
-
+known-third-party = []
 
 [tool.isort]
 py_version = 312
 line_length = 78
 line_ending = "\n"
-known_third_party = [
-
-]
 known_first_party = [
+    "core",
 ]
+known_third_party = []
 multi_line_output = 3
 indent = "\t"
 use_parentheses = true
