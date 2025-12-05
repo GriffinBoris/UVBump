@@ -64,6 +64,8 @@ ignore = [
     "D203", # Checks for docstring summary lines that are not positioned on the first physical line of the docstring.
     "D212", # Checks for docstring summary lines that are not positioned on the first physical line of the docstring.
     "Q000", # Checks for inline strings that use single quotes or double quotes
+    "Q003", # Checks for strings that include escaped quotes, and suggests changing the quote style to avoid the need to escape them.
+    "I", # isort rules.
 ]
 
 [tool.ruff.lint.isort]

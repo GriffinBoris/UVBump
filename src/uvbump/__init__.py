@@ -1,21 +1,22 @@
-"""CLI to report out-of-date dependency pins in uv workspaces."""
+"""CLI to report out-of-date dependency pins for uv or npm projects."""
 
 from __future__ import annotations
 
 import argparse
+import json
 import logging
 import subprocess
 import tomllib
-from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING
 
-if TYPE_CHECKING:
-	from collections.abc import Iterable
+from uvbump.core import (
+	configure_logging,
+	display_package_information,
+	Package,
+)
 
 __version__ = '0.1.0'
 logger = logging.getLogger(__name__)
-
 _MIN_LINES_FOR_VERSIONS = 2
 
 
@@ -27,79 +28,12 @@ class UnsupportedPackageTypeError(Exception):
 	"""Raised when dependency extras are encountered (unsupported)."""
 
 	def __init__(self) -> None:
-		"""Initialise the exception with a friendly message."""
-		message = 'Cannot support package extras'
-		super().__init__(message)
-
-
-@dataclass
-class Package:
-	"""Represents a dependency and its known versions."""
-
-	name: str
-	project_version: str
-	installed_version: str | None = None
-	newest_version: str | None = None
-
-
-def _read_toml(path: Path) -> dict:
-	"""Load TOML from *path* into a dictionary."""
-	with path.open('rb') as handle:
-		return tomllib.load(handle)
-
-
-def _collect_dependency_listings(data: dict) -> list[str]:
-	"""Return dependency spec strings from a pyproject dictionary."""
-	listings: list[str] = []
-	project = data.get('project', {})
-	listings.extend(project.get('dependencies', []) or [])
-	for deps in project.get('dependency-groups', {}).values():
-		listings.extend(deps or [])
-	for deps in data.get('dependency-groups', {}).values():
-		listings.extend(deps or [])
-	return listings
-
-
-class UVProject:
-	"""Represents a uv-managed project (optionally a workspace)."""
-
-	def __init__(self, root_path: Path) -> None:
-		"""Create a UVProject rooted at *root_path*."""
-		self.root_path = root_path
-
-	@property
-	def pyproject_path(self) -> Path:
-		"""Return the path to the project's pyproject.toml."""
-		return self.root_path / 'pyproject.toml'
-
-	def dependency_listings(self) -> list[str]:
-		"""Collect dependency specs from the root and workspace members."""
-		if not self.pyproject_path.exists():
-			message = f'pyproject.toml not found at: {self.pyproject_path}'
-			raise FileNotFoundError(message)
-
-		root_data = _read_toml(self.pyproject_path)
-		listings = _collect_dependency_listings(root_data)
-
-		workspace = root_data.get('tool', {}).get('uv', {}).get('workspace', {})
-		for member in workspace.get('members', []) or []:
-			member_pyproject = (self.root_path / member) / 'pyproject.toml'
-			if member_pyproject.exists():
-				member_data = _read_toml(member_pyproject)
-				listings.extend(_collect_dependency_listings(member_data))
-
-		seen: set[str] = set()
-		unique_listings: list[str] = []
-		for listing in listings:
-			if listing not in seen:
-				unique_listings.append(listing)
-				seen.add(listing)
-
-		return unique_listings
+		"""Initialise with a user-friendly message."""
+		super().__init__('Cannot support package extras')
 
 
 def split_package_from_version(listing: str) -> tuple[str, str]:
-	"""Split ``pkg>=1.2`` style strings into (name, version)."""
+	"""Split a dependency spec into (name, version)."""
 	cleaned_listing = listing.split(',')[0]
 
 	if '>=' in cleaned_listing:
@@ -120,27 +54,114 @@ def split_package_from_version(listing: str) -> tuple[str, str]:
 	return package_name, version
 
 
-def set_project_versions(packages: list[Package], dependency_listings: Iterable[str]) -> None:
-	"""Populate Package objects from dependency spec strings."""
-	for package_listing in dependency_listings:
-		package_name, version = split_package_from_version(package_listing)
-		packages.append(Package(package_name, version))
+class UvProject:
+	"""Represents a uv-managed project (workspace aware)."""
+
+	def __init__(self, root_path: Path) -> None:
+		"""Create a uv project rooted at *root_path*."""
+		self.root_path = root_path
+
+	@property
+	def pyproject_path(self) -> Path:
+		"""Return the path to pyproject.toml for this project."""
+		return self.root_path / 'pyproject.toml'
+
+	def dependency_listings(self) -> list[str]:
+		"""Collect dependency specs from the root and workspace members."""
+		if not self.pyproject_path.exists():
+			message = f'pyproject.toml not found at: {self.pyproject_path}'
+			raise FileNotFoundError(message)
+
+		root_data = tomllib.loads(self.pyproject_path.read_text())
+		listings = _collect_dependency_listings(root_data)
+
+		workspace = root_data.get('tool', {}).get('uv', {}).get('workspace', {})
+		for member in workspace.get('members', []) or []:
+			member_pyproject = (self.root_path / member) / 'pyproject.toml'
+			if member_pyproject.exists():
+				member_data = tomllib.loads(member_pyproject.read_text())
+				listings.extend(_collect_dependency_listings(member_data))
+
+		unique = []
+		seen: set[str] = set()
+		for item in listings:
+			if item not in seen:
+				unique.append(item)
+				seen.add(item)
+		return unique
+
+	def packages(self) -> list[Package]:
+		"""Return Package objects derived from dependency listings."""
+		return [Package(*split_package_from_version(spec)) for spec in self.dependency_listings()]
+
+
+class NpmProject:
+	"""Represents an npm project."""
+
+	def __init__(self, root_path: Path) -> None:
+		"""Create an npm project rooted at *root_path*."""
+		self.root_path = root_path
+
+	@property
+	def package_json_path(self) -> Path:
+		"""Return the path to package.json for this project."""
+		return self.root_path / 'package.json'
+
+	def dependency_specs(self) -> dict[str, str]:
+		"""Return dependency name→spec mapping from package.json."""
+		if not self.package_json_path.exists():
+			message = f'package.json not found at: {self.package_json_path}'
+			raise FileNotFoundError(message)
+
+		data = json.loads(self.package_json_path.read_text())
+		listings: dict[str, str] = {}
+		for key in ('dependencies', 'devDependencies', 'peerDependencies', 'optionalDependencies'):
+			listings.update(data.get(key, {}))
+		return listings
+
+	def packages(self) -> list[Package]:
+		"""Return Package objects derived from dependency specs."""
+		packages: list[Package] = []
+		for name, spec in self.dependency_specs().items():
+			if spec.startswith(('git+', 'file:', 'http:', 'https:')):
+				message = f'Unsupported non-registry spec for {name}: {spec}'
+				raise UnsupportedPackageTypeError(message)
+			packages.append(Package(name=name, project_version=_normalize_spec(spec)))
+		return packages
+
+
+def _normalize_spec(spec: str) -> str:
+	"""Strip leading range operators from an npm version spec."""
+	for op in ('^', '~', '>=', '<=', '>', '<', '='):
+		if spec.startswith(op):
+			return spec[len(op) :]
+	return spec
+
+
+def _collect_dependency_listings(data: dict) -> list[str]:
+	"""Collect dependency strings from a pyproject dict."""
+	listings: list[str] = []
+	project = data.get('project', {})
+	listings.extend(project.get('dependencies', []) or [])
+	for deps in project.get('dependency-groups', {}).values():
+		listings.extend(deps or [])
+	for deps in data.get('dependency-groups', {}).values():
+		listings.extend(deps or [])
+	return listings
 
 
 def validate_package_extras(packages: list[Package]) -> None:
-	"""Abort if any dependency uses extras (unsupported)."""
-	unsupported_packages = [p for p in packages if '[' in p.name]
-
-	for package in unsupported_packages:
+	"""Ensure no dependency uses extras (unsupported)."""
+	extras = [p for p in packages if '[' in p.name]
+	for package in extras:
 		logger.error('Unsupported package with extra: %s', package.name)
-
-	if unsupported_packages:
+	if extras:
 		raise UnsupportedPackageTypeError
 
 
-def set_installed_versions(packages: list[Package], root: Path, timeout: int) -> None:
-	"""Fill installed versions by running ``uv export`` inside *root*."""
-	package_name_to_package_map = {p.name: p for p in packages}
+def set_installed_versions_uv(packages: list[Package], root: Path, timeout: int) -> None:
+	"""Fill installed versions for uv projects via `uv export`."""
+	package_map = {p.name: p for p in packages}
 	args = [
 		'uv',
 		'export',
@@ -151,7 +172,6 @@ def set_installed_versions(packages: list[Package], root: Path, timeout: int) ->
 		'requirements-txt',
 		'--no-hashes',
 	]
-
 	try:
 		result = subprocess.run(  # noqa: S603
 			args,
@@ -161,30 +181,24 @@ def set_installed_versions(packages: list[Package], root: Path, timeout: int) ->
 			cwd=root,
 			timeout=timeout,
 		)
-	except FileNotFoundError:
-		logger.exception('`uv` command not found. Install uv and ensure it is on PATH.')
-		return
-	except subprocess.TimeoutExpired:
-		logger.exception('`uv export` timed out.')
-		return
-	except subprocess.CalledProcessError as exc:
-		logger.exception('`uv export` failed: %s', exc.stderr)
+	except (FileNotFoundError, subprocess.SubprocessError):
+		logger.exception('`uv export` failed')
 		return
 
 	for line in result.stdout.splitlines():
 		if line.startswith('#'):
 			continue
-		cleaned_line = line.split(';')[0].strip()
-		if '==' not in cleaned_line:
+		cleaned = line.split(';')[0].strip()
+		if '==' not in cleaned:
 			continue
-		package_name, version = cleaned_line.split('==')
-		package = package_name_to_package_map.get(package_name)
+		name, version = cleaned.split('==')
+		package = package_map.get(name)
 		if package:
 			package.installed_version = version
 
 
-def set_newest_versions(packages: list[Package], timeout: int) -> None:
-	"""Fill newest versions from PyPI using ``uvx pip index versions``."""
+def set_newest_versions_uv(packages: list[Package], timeout: int) -> None:
+	"""Fill newest versions for uv projects via `uvx pip index versions`."""
 	for package in packages:
 		args = ['uvx', 'pip', 'index', 'versions', package.name]
 		try:
@@ -195,14 +209,8 @@ def set_newest_versions(packages: list[Package], timeout: int) -> None:
 				text=True,
 				timeout=timeout,
 			)
-		except FileNotFoundError:
-			logger.exception('`uvx` command not found. Install uv and ensure it is on PATH.')
-			return
-		except subprocess.TimeoutExpired:
-			logger.exception('`uvx pip index versions %s` timed out.', package.name)
-			continue
-		except subprocess.CalledProcessError as exc:
-			logger.exception('`uvx pip index versions %s` failed: %s', package.name, exc.stderr)
+		except (FileNotFoundError, subprocess.SubprocessError):
+			logger.exception('`uvx pip index versions %s` failed', package.name)
 			continue
 
 		lines = result.stdout.splitlines()
@@ -213,100 +221,105 @@ def set_newest_versions(packages: list[Package], timeout: int) -> None:
 			package.newest_version = versions[0].strip()
 
 
-def display_package_information(packages: list[Package]) -> None:
-	"""Log two tables: outdated packages and bumpable packages."""
-	packages_out_of_date: list[Package] = []
-	packages_can_be_bumped: list[Package] = []
+def set_installed_versions_npm(packages: list[Package], root: Path, timeout: int) -> None:
+	"""Fill installed versions for npm projects via `npm ls`."""
+	package_map = {p.name: p for p in packages}
+	args = ['npm', 'ls', '--depth=0', '--json']
+	try:
+		result = subprocess.run(  # noqa: S603
+			args,
+			check=True,
+			capture_output=True,
+			text=True,
+			cwd=root,
+			timeout=timeout,
+		)
+	except (FileNotFoundError, subprocess.SubprocessError):
+		logger.exception('`npm ls` failed')
+		return
 
+	data = json.loads(result.stdout)
+	installed = data.get('dependencies', {})
+	for name, info in installed.items():
+		package = package_map.get(name)
+		if package:
+			package.installed_version = info.get('version')
+
+
+def set_newest_versions_npm(packages: list[Package], root: Path, timeout: int) -> None:
+	"""Fill newest versions for npm projects via `npm view`."""
 	for package in packages:
-		if not package.installed_version:
+		args = ['npm', 'view', package.name, 'version']
+		try:
+			result = subprocess.run(  # noqa: S603
+				args,
+				check=True,
+				capture_output=True,
+				text=True,
+				cwd=root,
+				timeout=timeout,
+			)
+		except (FileNotFoundError, subprocess.SubprocessError):
+			logger.exception('`npm view %s version` failed', package.name)
 			continue
-		if package.installed_version != package.project_version:
-			packages_can_be_bumped.append(package)
-		if package.newest_version and package.newest_version != package.project_version:
-			packages_out_of_date.append(package)
 
-	if packages_out_of_date:
-		logger.info('Packages out of date:')
-		header = '{:<50}{:<30}{:<30}{:<30}{}'.format(
-			'Package Name',
-			'Installed Version',
-			'Project Version',
-			'Newest Version',
-			'Suggested Action',
-		)
-		logger.info(header)
-		suggested_action = 'Update package version'
-		for package in packages_out_of_date:
-			logger.info(
-				'%s',
-				f'{package.name:<50}{package.installed_version:<30}{package.project_version:<30}{package.newest_version:<30}{suggested_action}',
-			)
-
-	if packages_out_of_date and packages_can_be_bumped:
-		logger.info('')
-
-	if packages_can_be_bumped:
-		logger.info('Packages can be bumped:')
-		header = '{:<50}{:<30}{:<30}{:<30}{}'.format(
-			'Package Name',
-			'Installed Version',
-			'Project Version',
-			'Newest Version',
-			'Suggested Action',
-		)
-		logger.info(header)
-		suggested_action = 'Bump package version in project specification'
-		for package in packages_can_be_bumped:
-			logger.info(
-				'%s',
-				f'{package.name:<50}{package.installed_version:<30}{package.project_version:<30}{package.newest_version:<30}{suggested_action}',
-			)
+		package.newest_version = result.stdout.strip()
 
 
 def _build_arg_parser() -> argparse.ArgumentParser:
-	"""Construct the argument parser for the CLI."""
 	parser = argparse.ArgumentParser(
-		description='Inspect dependency versions for a uv project or workspace.',
+		description='Inspect dependency versions for uv or npm projects.',
 	)
 	parser.add_argument(
 		'--root',
 		type=Path,
 		default=Path.cwd(),
-		help='Path to the directory containing pyproject.toml. Default: current working directory.',
+		help='Path to the project root (pyproject.toml or package.json).',
+	)
+	parser.add_argument(
+		'--kind',
+		choices=['uv', 'npm'],
+		default='uv',
+		help='Project type to inspect (uv or npm).',
 	)
 	parser.add_argument(
 		'--timeout',
 		type=int,
 		default=20,
-		help='Subprocess timeout in seconds for uv/uvx calls. Default: 20.',
+		help='Subprocess timeout in seconds for uv/uvx/npm calls.',
 	)
 	return parser
 
 
 def main(argv: list[str] | None = None) -> int:
-	"""Entry point for the `uvbump` console script."""
-	logging.basicConfig(level=logging.INFO, format='%(message)s')
+	"""CLI entry point for uvbump."""
+	configure_logging()
 	args = _build_arg_parser().parse_args(argv)
-	project = UVProject(args.root)
 
-	try:
-		dependency_listings = project.dependency_listings()
-	except FileNotFoundError:
-		logger.exception('pyproject.toml not found')
-		return 2
+	if args.kind == 'uv':
+		project = UvProject(args.root)
+		try:
+			packages = project.packages()
+		except FileNotFoundError:
+			logger.exception('pyproject.toml not found')
+			return 2
+		try:
+			validate_package_extras(packages)
+		except UnsupportedPackageTypeError:
+			return 3
+		set_installed_versions_uv(packages, args.root, args.timeout)
+		set_newest_versions_uv(packages, args.timeout)
+	else:
+		project = NpmProject(args.root)
+		try:
+			packages = project.packages()
+		except FileNotFoundError:
+			logger.exception('package.json not found')
+			return 2
+		set_installed_versions_npm(packages, args.root, args.timeout)
+		set_newest_versions_npm(packages, args.root, args.timeout)
 
-	packages: list[Package] = []
-	set_project_versions(packages, dependency_listings)
-
-	try:
-		validate_package_extras(packages)
-	except UnsupportedPackageTypeError:
-		return 3
-
-	set_installed_versions(packages, args.root, args.timeout)
-	set_newest_versions(packages, args.timeout)
-	display_package_information(packages)
+	display_package_information(packages, logger=logger, column_widths=(50, 30, 30, 30), require_newest_version=True)
 	return 0
 
 
