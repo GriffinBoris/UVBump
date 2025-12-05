@@ -1,0 +1,16 @@
+[project]
+name = "test"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = []
+
+[dependency-groups]
+dev = [
+    "isort>=6.0.1",
+    "ruff>=0.12.9",
+]
+
+[tool.uv.workspace]
+members = ["sub_project_one", "sub_project_two"]
