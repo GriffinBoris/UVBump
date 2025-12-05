@@ -1,0 +1,26 @@
+# See https://pre-commit.com for more information
+# See https://pre-commit.com/hooks.html for more hooks
+repos:
+  - repo: local
+    hooks:
+      - id: lint
+        name: lint
+        entry: bash -c 'cd src && uv run ruff check --fix'
+        language: system
+        types: [ python ]
+        pass_filenames: false
+
+      - id: format
+        name: format
+        entry: bash -c 'cd src && uv run ruff format'
+        language: system
+        types: [ python ]
+        pass_filenames: false
+
+      - id: sort_imports
+        name: sort imports
+        entry: bash -c 'cd src && uv run isort .'
+        language: system
+        types: [ python ]
+        pass_filenames: false
+
