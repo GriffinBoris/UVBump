@@ -1,5 +1,3 @@
-"""CLI to report out-of-date dependency pins for uv or npm projects."""
-
 from __future__ import annotations
 
 import argparse
@@ -21,19 +19,15 @@ _MIN_LINES_FOR_VERSIONS = 2
 
 
 class UnknownPackageVersionSchemeError(Exception):
-	"""Raised when a dependency specifier format is not recognized."""
+	pass
 
 
 class UnsupportedPackageTypeError(Exception):
-	"""Raised when dependency extras are encountered (unsupported)."""
-
 	def __init__(self) -> None:
-		"""Initialise with a user-friendly message."""
 		super().__init__('Cannot support package extras')
 
 
 def split_package_from_version(listing: str) -> tuple[str, str]:
-	"""Split a dependency spec into (name, version)."""
 	cleaned_listing = listing.split(',')[0]
 
 	if '>=' in cleaned_listing:
@@ -55,19 +49,14 @@ def split_package_from_version(listing: str) -> tuple[str, str]:
 
 
 class UvProject:
-	"""Represents a uv-managed project (workspace aware)."""
-
 	def __init__(self, root_path: Path) -> None:
-		"""Create a uv project rooted at *root_path*."""
 		self.root_path = root_path
 
 	@property
 	def pyproject_path(self) -> Path:
-		"""Return the path to pyproject.toml for this project."""
 		return self.root_path / 'pyproject.toml'
 
 	def dependency_listings(self) -> list[str]:
-		"""Collect dependency specs from the root and workspace members."""
 		if not self.pyproject_path.exists():
 			message = f'pyproject.toml not found at: {self.pyproject_path}'
 			raise FileNotFoundError(message)
@@ -82,45 +71,45 @@ class UvProject:
 				member_data = tomllib.loads(member_pyproject.read_text())
 				listings.extend(_collect_dependency_listings(member_data))
 
-		unique = []
+		unique: list[str] = []
 		seen: set[str] = set()
 		for item in listings:
 			if item not in seen:
 				unique.append(item)
 				seen.add(item)
+
 		return unique
 
 	def packages(self) -> list[Package]:
-		"""Return Package objects derived from dependency listings."""
 		return [Package(*split_package_from_version(spec)) for spec in self.dependency_listings()]
 
 
 class NpmProject:
-	"""Represents an npm project."""
-
 	def __init__(self, root_path: Path) -> None:
-		"""Create an npm project rooted at *root_path*."""
 		self.root_path = root_path
 
 	@property
 	def package_json_path(self) -> Path:
-		"""Return the path to package.json for this project."""
 		return self.root_path / 'package.json'
 
 	def dependency_specs(self) -> dict[str, str]:
-		"""Return dependency name→spec mapping from package.json."""
 		if not self.package_json_path.exists():
 			message = f'package.json not found at: {self.package_json_path}'
 			raise FileNotFoundError(message)
 
 		data = json.loads(self.package_json_path.read_text())
 		listings: dict[str, str] = {}
-		for key in ('dependencies', 'devDependencies', 'peerDependencies', 'optionalDependencies'):
+		for key in (
+			'dependencies',
+			'devDependencies',
+			'peerDependencies',
+			'optionalDependencies',
+		):
 			listings.update(data.get(key, {}))
+
 		return listings
 
 	def packages(self) -> list[Package]:
-		"""Return Package objects derived from dependency specs."""
 		packages: list[Package] = []
 		for name, spec in self.dependency_specs().items():
 			if spec.startswith(('git+', 'file:', 'http:', 'https:')):
@@ -131,7 +120,6 @@ class NpmProject:
 
 
 def _normalize_spec(spec: str) -> str:
-	"""Strip leading range operators from an npm version spec."""
 	for op in ('^', '~', '>=', '<=', '>', '<', '='):
 		if spec.startswith(op):
 			return spec[len(op) :]
@@ -139,7 +127,6 @@ def _normalize_spec(spec: str) -> str:
 
 
 def _collect_dependency_listings(data: dict) -> list[str]:
-	"""Collect dependency strings from a pyproject dict."""
 	listings: list[str] = []
 	project = data.get('project', {})
 	listings.extend(project.get('dependencies', []) or [])
@@ -151,7 +138,6 @@ def _collect_dependency_listings(data: dict) -> list[str]:
 
 
 def validate_package_extras(packages: list[Package]) -> None:
-	"""Ensure no dependency uses extras (unsupported)."""
 	extras = [p for p in packages if '[' in p.name]
 	for package in extras:
 		logger.error('Unsupported package with extra: %s', package.name)
@@ -160,7 +146,6 @@ def validate_package_extras(packages: list[Package]) -> None:
 
 
 def set_installed_versions_uv(packages: list[Package], root: Path, timeout: int) -> None:
-	"""Fill installed versions for uv projects via `uv export`."""
 	package_map = {p.name: p for p in packages}
 	args = [
 		'uv',
@@ -172,6 +157,7 @@ def set_installed_versions_uv(packages: list[Package], root: Path, timeout: int)
 		'requirements-txt',
 		'--no-hashes',
 	]
+
 	try:
 		result = subprocess.run(  # noqa: S603
 			args,
@@ -198,7 +184,6 @@ def set_installed_versions_uv(packages: list[Package], root: Path, timeout: int)
 
 
 def set_newest_versions_uv(packages: list[Package], timeout: int) -> None:
-	"""Fill newest versions for uv projects via `uvx pip index versions`."""
 	for package in packages:
 		args = ['uvx', 'pip', 'index', 'versions', package.name]
 		try:
@@ -222,9 +207,9 @@ def set_newest_versions_uv(packages: list[Package], timeout: int) -> None:
 
 
 def set_installed_versions_npm(packages: list[Package], root: Path, timeout: int) -> None:
-	"""Fill installed versions for npm projects via `npm ls`."""
 	package_map = {p.name: p for p in packages}
 	args = ['npm', 'ls', '--depth=0', '--json']
+
 	try:
 		result = subprocess.run(  # noqa: S603
 			args,
@@ -247,7 +232,6 @@ def set_installed_versions_npm(packages: list[Package], root: Path, timeout: int
 
 
 def set_newest_versions_npm(packages: list[Package], root: Path, timeout: int) -> None:
-	"""Fill newest versions for npm projects via `npm view`."""
 	for package in packages:
 		args = ['npm', 'view', package.name, 'version']
 		try:
@@ -267,9 +251,7 @@ def set_newest_versions_npm(packages: list[Package], root: Path, timeout: int) -
 
 
 def _build_arg_parser() -> argparse.ArgumentParser:
-	parser = argparse.ArgumentParser(
-		description='Inspect dependency versions for uv or npm projects.',
-	)
+	parser = argparse.ArgumentParser(description='Inspect dependency versions for uv or npm projects.')
 	parser.add_argument(
 		'--root',
 		type=Path,
@@ -292,7 +274,6 @@ def _build_arg_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
-	"""CLI entry point for uvbump."""
 	configure_logging()
 	args = _build_arg_parser().parse_args(argv)
 
@@ -319,7 +300,12 @@ def main(argv: list[str] | None = None) -> int:
 		set_installed_versions_npm(packages, args.root, args.timeout)
 		set_newest_versions_npm(packages, args.root, args.timeout)
 
-	display_package_information(packages, logger=logger, column_widths=(50, 30, 30, 30), require_newest_version=True)
+	display_package_information(
+		packages,
+		logger=logger,
+		column_widths=(50, 30, 30, 30),
+		require_newest_version=True,
+	)
 	return 0
 
 
