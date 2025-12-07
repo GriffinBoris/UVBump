@@ -1,0 +1,51 @@
+{
+  "python": [
+    {
+      "name": "django",
+      "install_version": "5.0.6",
+      "project_version": "5.1.2",
+      "pyproject": "test/sub_project_one/pyproject.toml",
+      "section": "project.dependencies",
+      "operator": ">="
+    },
+    {
+      "name": "requests",
+      "install_version": "2.31.0",
+      "project_version": "2.32.3",
+      "pyproject": "test/sub_project_one/pyproject.toml",
+      "section": "project.dependencies",
+      "operator": ">="
+    },
+    {
+      "name": "uwsgi",
+      "project_version": "2.0.30",
+      "pyproject": "test/sub_project_one/pyproject.toml",
+      "section": "dependency-groups.deployment",
+      "operator": ">="
+    },
+    {
+      "name": "numpy",
+      "install_version": "2.1.0",
+      "project_version": "2.1.2",
+      "pyproject": "test/sub_project_two/pyproject.toml",
+      "section": "project.dependencies",
+      "operator": ">="
+    },
+    {
+      "name": "pandas",
+      "install_version": "2.2.2",
+      "project_version": "2.2.3",
+      "pyproject": "test/sub_project_two/pyproject.toml",
+      "section": "project.dependencies",
+      "operator": ">="
+    },
+    {
+      "name": "psycopg[binary]",
+      "install_version": "3.2.1",
+      "project_version": "3.2.3",
+      "pyproject": "test/sub_project_two/pyproject.toml",
+      "section": "project.dependencies",
+      "operator": ">="
+    }
+  ]
+}

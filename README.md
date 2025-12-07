@@ -38,6 +38,14 @@ uvbump --root /path/to/project
 - Run locally with `uv run python -m uvbump --root test` to exercise the sample workspace in `test/`.
 - Formatting/linting is not configured yet; contributions welcome.
 
+## Docker test harness
+
+- Build an image that prepares custom mismatched environments: `docker build -t uvbump-tests .`
+- Version scenarios live in `test/version-config.json`; mount or replace it and tweak `install_version` / `project_version` pairs per package.
+- Entry point applies the config (installing the requested versions locally and rewriting the pinned versions in the referenced `pyproject.toml` files) before running the container command.
+- Run a sample check: `docker run --rm -e VERSION_CONFIG=/app/test/version-config.json uvbump-tests python -m uvbump --root test`
+- Opt out of installs with `SKIP_INSTALL=1` or skip pyproject rewrites entirely with `SKIP_VERSION_CONFIG=1`.
+
 ## Building & publishing to PyPI
 
 1. Build artifacts: `uv build` (uses Hatchling under the hood).

@@ -36,9 +36,10 @@ include = ["src/uvbump", "README.md", "LICENSE"]
 
 [dependency-groups]
 dev = [
-    "isort>=7.0.0",
-    "pre-commit>=4.5.0",
-    "ruff>=0.14.8",
+	"isort>=7.0.0",
+	"pre-commit>=4.5.0",
+	"ruff>=0.14.8",
+	"tomli-w>=1.0.0",
 ]
 
 
