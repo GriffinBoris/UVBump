@@ -1,0 +1,11 @@
+[project]
+name = "sub-project-two"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "numpy>={{ SUB2_NUMPY_PIN }}",
+    "pandas>={{ SUB2_PANDAS_PIN }}",
+    "psycopg[binary]>={{ SUB2_PSYCOPG_PIN }}",
+]

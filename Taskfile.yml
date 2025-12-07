@@ -1,0 +1,47 @@
+version: '3'
+
+vars:
+  IMAGE_NAME: '{{.IMAGE_NAME | default "uvbump-tests"}}'
+  VERSION_ENV_DEFAULT: '{{print .TASKFILE_DIR "/test/version.env"}}'
+  TEMPLATE_ROOT_DEFAULT: '{{print .TASKFILE_DIR "/test"}}'
+
+tasks:
+  docker:build:
+    desc: Build the docker image that applies envsub pins and runs uvbump.
+    cmds:
+      - docker build -t {{.IMAGE_NAME}} {{.TASKFILE_DIR}}
+
+  docker:run:
+    desc: Run uvbump against the sample workspace using the entrypoint flow.
+    deps: [docker:build]
+    cmds:
+      - docker run --rm -e VERSION_ENV={{.VERSION_ENV | default "/app/test/version.env"}} {{.IMAGE_NAME}} python -m uvbump --root test
+
+  env:render:
+    desc: Render pyproject.toml files from Jinja templates using the version env file.
+    cmds:
+      - |
+        set -euo pipefail
+        VERSION_ENV="{{.VERSION_ENV | default .VERSION_ENV_DEFAULT}}"
+        TEMPLATE_ROOT="{{.TEMPLATE_ROOT | default .TEMPLATE_ROOT_DEFAULT}}"
+        python scripts/render_templates.py --template-root "$TEMPLATE_ROOT" --output-root "$TEMPLATE_ROOT" --env-file "$VERSION_ENV"
+
+  env:install:
+    desc: Install runtime package versions defined in the version env file.
+    cmds:
+      - |
+        set -euo pipefail
+        VERSION_ENV="{{.VERSION_ENV | default .VERSION_ENV_DEFAULT}}"
+        if [ ! -f "$VERSION_ENV" ]; then
+          echo "Version env not found at $VERSION_ENV" >&2
+          exit 1
+        fi
+        set -a; . "$VERSION_ENV"; set +a
+        if [ -z "${PYTHON_INSTALL_SPECS:-}" ]; then
+          echo "PYTHON_INSTALL_SPECS not set in $VERSION_ENV" >&2
+          exit 1
+        fi
+        if command -v uv >/dev/null 2>&1; then
+          uv pip install --system ${PYTHON_INSTALL_SPECS} || true
+        fi
+        python -m pip install --no-cache-dir ${PYTHON_INSTALL_SPECS}

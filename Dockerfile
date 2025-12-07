@@ -15,13 +15,13 @@ RUN curl -LsSf https://astral.sh/uv/install.sh | sh && \
 WORKDIR /app
 COPY . /app
 
-# Install helper dependencies and uvbump itself so scripts can import it.
-RUN uv pip install --system --no-cache-dir tomli-w && \
+# Install helper deps and uvbump so the CLI is available.
+RUN uv pip install --system --no-cache-dir Jinja2 && \
 	uv pip install --system --no-cache-dir -e .
 
 RUN chmod +x scripts/docker-entrypoint.sh
 
-ENV VERSION_CONFIG=/app/test/version-config.json
+ENV VERSION_ENV=/app/test/version.env
 ENV ROOT_DIR=/app
 
 ENTRYPOINT ["/app/scripts/docker-entrypoint.sh"]

@@ -39,7 +39,7 @@ dev = [
 	"isort>=7.0.0",
 	"pre-commit>=4.5.0",
 	"ruff>=0.14.8",
-	"tomli-w>=1.0.0",
+	"jinja2>=3.1.0",
 ]
 
 
@@ -71,6 +71,8 @@ ignore = [
     "ANN001", # Missing type annotation for function argument.
     "ANN201", # Missing return type annotation for public function.
     "ERA001", # Found commented-out code.
+    "PLR0912", # Too many branches.
+    "C901", # is too complex.
 ]
 
 [tool.ruff.lint.isort]

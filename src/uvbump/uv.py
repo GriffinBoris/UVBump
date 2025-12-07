@@ -1,4 +1,6 @@
+import json
 import subprocess
+import sys
 import tomllib
 from pathlib import Path
 
@@ -90,41 +92,82 @@ def validate_package_extras(packages: list[Package]) -> None:
 
 def set_installed_versions_uv(packages: list[Package], root: Path, timeout: int) -> None:
 	package_map = {p.name: p for p in packages}
-	args = [
-		'uv',
-		'export',
-		'--locked',
-		'--all-packages',
-		'--all-groups',
-		'--format',
-		'requirements-txt',
-		'--no-hashes',
+	commands = [
+		[
+			'uv',
+			'export',
+			'--locked',
+			'--all-packages',
+			'--all-groups',
+			'--format',
+			'requirements-txt',
+			'--no-hashes',
+		],
 	]
 
-	try:
-		result = subprocess.run(  # noqa: S603
-			args,
-			check=True,
-			capture_output=True,
-			text=True,
-			cwd=root,
-			timeout=timeout,
-		)
-	except (FileNotFoundError, subprocess.SubprocessError):
+	for args in commands:
+		try:
+			result = subprocess.run(  # noqa: S603
+				args,
+				check=True,
+				capture_output=True,
+				text=True,
+				cwd=root,
+				timeout=timeout,
+			)
+		except (FileNotFoundError, subprocess.SubprocessError):
+			continue
+
+		for line in result.stdout.splitlines():
+			if line.startswith('#'):
+				continue
+
+			cleaned = line.split(';')[0].strip()
+			if '==' not in cleaned:
+				continue
+
+			name, version = cleaned.split('==')
+			package = package_map.get(name)
+			if package:
+				package.installed_version = version
+
+	if any(package.installed_version for package in packages):
 		return
 
-	for line in result.stdout.splitlines():
-		if line.startswith('#'):
+	fallback_commands = [
+		['uv', 'pip', 'list', '--format', 'json'],
+		[sys.executable, '-m', 'pip', 'list', '--format', 'json'],
+	]
+
+	for args in fallback_commands:
+		try:
+			result = subprocess.run(  # noqa: S603
+				args,
+				check=True,
+				capture_output=True,
+				text=True,
+				cwd=root,
+				timeout=timeout,
+			)
+		except (FileNotFoundError, subprocess.SubprocessError):
 			continue
 
-		cleaned = line.split(';')[0].strip()
-		if '==' not in cleaned:
+		try:
+			installed = json.loads(result.stdout)
+		except json.JSONDecodeError:
 			continue
 
-		name, version = cleaned.split('==')
-		package = package_map.get(name)
-		if package:
-			package.installed_version = version
+		for info in installed:
+			name = info.get('name')
+			version = info.get('version')
+			if not name or not version:
+				continue
+			package = package_map.get(name)
+			if package:
+				package.installed_version = version
+
+		if any(package.installed_version for package in packages):
+			return
 
 
 def set_newest_versions_uv(packages: list[Package], timeout: int) -> None:
