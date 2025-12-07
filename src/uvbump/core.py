@@ -29,27 +29,19 @@ def log_table(title: str, rows: Iterable[Package], column_widths: tuple[int, int
 	if not rows:
 		return
 
-	header_fmt = f'{{:<{column_widths[0]}}}{{:<{column_widths[1]}}}{{:<{column_widths[2]}}}{{:<{column_widths[3]}}}{{}}'
+	def fmt(value: str | None, width: int) -> str:
+		text = value if value is not None else '-'
+		return f'{text:<{width}}'
+
+	name_w, installed_w, project_w, newest_w = column_widths
+	header = f'{"Package Name":<{name_w}}{"Installed Version":<{installed_w}}{"Project Version":<{project_w}}{"Newest Version":<{newest_w}}Suggested Action'
 
 	logger.info(title)
-	logger.info(
-		header_fmt,
-		'Package Name',
-		'Installed Version',
-		'Project Version',
-		'Newest Version',
-		'Suggested Action',
-	)
+	logger.info(header)
 
 	for package in rows:
-		logger.info(
-			header_fmt,
-			package.name,
-			package.installed_version,
-			package.project_version,
-			package.newest_version,
-			suggested_action,
-		)
+		line = fmt(package.name, name_w) + fmt(package.installed_version, installed_w) + fmt(package.project_version, project_w) + fmt(package.newest_version, newest_w) + suggested_action
+		logger.info(line)
 
 
 def display_package_information(
