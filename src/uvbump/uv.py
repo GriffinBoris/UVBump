@@ -36,10 +36,12 @@ def _collect_dependency_listings(data: dict) -> list[str]:
 	listings: list[str] = []
 	project = data.get('project', {})
 	listings.extend(project.get('dependencies', []) or [])
+
 	for deps in project.get('dependency-groups', {}).values():
 		listings.extend(deps or [])
 	for deps in data.get('dependency-groups', {}).values():
 		listings.extend(deps or [])
+
 	return listings
 
 
@@ -114,9 +116,11 @@ def set_installed_versions_uv(packages: list[Package], root: Path, timeout: int)
 	for line in result.stdout.splitlines():
 		if line.startswith('#'):
 			continue
+
 		cleaned = line.split(';')[0].strip()
 		if '==' not in cleaned:
 			continue
+
 		name, version = cleaned.split('==')
 		package = package_map.get(name)
 		if package:
@@ -140,6 +144,7 @@ def set_newest_versions_uv(packages: list[Package], timeout: int) -> None:
 		lines = result.stdout.splitlines()
 		if len(lines) < _MIN_LINES_FOR_VERSIONS or 'Available versions:' not in lines[1]:
 			continue
+
 		versions = lines[1].replace('Available versions:', '').strip().split(',')
 		if versions:
 			package.newest_version = versions[0].strip()

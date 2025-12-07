@@ -1,1 +1,0 @@
-"""uvbump namespace package."""

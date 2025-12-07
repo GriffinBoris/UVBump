@@ -1,7 +1,6 @@
 import logging
 from collections.abc import Iterable
 from dataclasses import dataclass
-from typing import Logger
 
 
 class UnknownPackageVersionSchemeError(Exception):
@@ -12,7 +11,7 @@ class UnsupportedPackageTypeError(Exception):
 	pass
 
 
-def configure_logging(level: int = logging.INFO) -> Logger:
+def configure_logging(level: int = logging.INFO):
 	logging.basicConfig(level=level, format='%(message)s')
 	return logging.getLogger(__name__)
 
@@ -25,12 +24,13 @@ class Package:
 	newest_version: str | None = None
 
 
-def log_table(title: str, rows: Iterable[Package], column_widths: tuple[int, int, int, int], suggested_action: str, logger: Logger) -> None:
+def log_table(title: str, rows: Iterable[Package], column_widths: tuple[int, int, int, int], suggested_action: str, logger) -> None:
 	rows = list(rows)
 	if not rows:
 		return
 
 	header_fmt = f'{{:<{column_widths[0]}}}{{:<{column_widths[1]}}}{{:<{column_widths[2]}}}{{:<{column_widths[3]}}}{{}}'
+
 	logger.info(title)
 	logger.info(
 		header_fmt,
@@ -40,6 +40,7 @@ def log_table(title: str, rows: Iterable[Package], column_widths: tuple[int, int
 		'Newest Version',
 		'Suggested Action',
 	)
+
 	for package in rows:
 		logger.info(
 			header_fmt,
@@ -53,11 +54,16 @@ def log_table(title: str, rows: Iterable[Package], column_widths: tuple[int, int
 
 def display_package_information(
 	packages: Iterable[Package],
-	logger: Logger,
+	logger,
 	column_widths: tuple[int, int, int, int] = (50, 30, 30, 30),
 	*,
 	require_newest_version: bool = True,
 ) -> None:
+	packages = list(packages)
+	if not any(package.installed_version for package in packages):
+		logger.info('No installed versions detected; ensure your environment is locked/installed so uvbump can compare versions.')
+		return
+
 	packages_out_of_date: list[Package] = []
 	packages_can_be_bumped: list[Package] = []
 
@@ -84,3 +90,6 @@ def display_package_information(
 		'Bump package version in project specification',
 		logger,
 	)
+
+	if not packages_out_of_date and not packages_can_be_bumped:
+		logger.info('All discovered packages match installed and newest versions.')

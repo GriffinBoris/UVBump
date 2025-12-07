@@ -9,6 +9,7 @@ def _normalize_spec(spec: str) -> str:
 	for op in ('^', '~', '>=', '<=', '>', '<', '='):
 		if spec.startswith(op):
 			return spec[len(op) :]
+
 	return spec
 
 
@@ -27,6 +28,7 @@ class NpmProject:
 
 		data = json.loads(self.package_json_path.read_text())
 		listings: dict[str, str] = {}
+
 		for key in (
 			'dependencies',
 			'devDependencies',
@@ -34,6 +36,7 @@ class NpmProject:
 			'optionalDependencies',
 		):
 			listings.update(data.get(key, {}))
+
 		return listings
 
 	def packages(self) -> list[Package]:
