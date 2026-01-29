@@ -59,6 +59,12 @@ def _build_arg_parser() -> argparse.ArgumentParser:
 		help='Interactively choose which dependencies to upgrade.',
 	)
 	parser.add_argument(
+		'--group-by',
+		choices=['workspace', 'package'],
+		default='workspace',
+		help='Grouping used in interactive mode (workspace or package).',
+	)
+	parser.add_argument(
 		'--dry-run',
 		action='store_true',
 		help='Preview upgrade changes without writing files.',
@@ -91,32 +97,79 @@ def _load_packages(args: argparse.Namespace) -> tuple[list[Package], int | None]
 	return packages, None
 
 
-def _choose_entries_interactive(entries) -> list:
-	logger.info('')
-	logger.info('Upgradable entries:')
-	for idx, (origin, package) in enumerate(entries, start=1):
-		logger.info('%s. %s (%s -> %s)', idx, package.display_name, origin.raw_spec, package.newest_version)
+def _entry_group_key(entry, group_by: str) -> str:
+	origin, package = entry
+	if group_by == 'package':
+		return package.display_name
+	return str(getattr(origin, 'pyproject_path', None) or getattr(origin, 'package_json_path', None))
 
-	response = input('Select entries to upgrade [a=all, n=none, 1,2,3]: ').strip().lower()
+
+def _group_entries(entries, group_by: str) -> list:
+	grouped_entries = {}
+	groups = []
+	for entry in entries:
+		group_key = _entry_group_key(entry, group_by)
+
+		if group_key not in grouped_entries:
+			grouped_entries[group_key] = []
+			groups.append((group_key, grouped_entries[group_key]))
+		grouped_entries[group_key].append(entry)
+
+	return groups
+
+
+def _render_grouped_entries(groups, group_by: str) -> tuple[dict, dict]:
+	logger.info('')
+	logger.info('Upgradable entries (grouped by %s):', group_by)
+	group_map = {}
+	item_map = {}
+
+	for group_index, (path, group_entries) in enumerate(groups, start=1):
+		group_key = str(group_index)
+		group_map[group_key] = group_entries
+		logger.info('%s) %s', group_key, path)
+
+		for item_index, entry in enumerate(group_entries, start=1):
+			origin, package = entry
+			item_key = f'{group_index}.{item_index}'
+			item_map[item_key] = entry
+			logger.info('  %s) %s (%s -> %s)', item_key, package.display_name, origin.raw_spec, package.newest_version)
+
+	return group_map, item_map
+
+
+def _select_entries(entries, group_map, item_map, response) -> list:
 	if response in ('', 'a', 'all'):
 		return entries
 	if response in ('n', 'none'):
 		logger.info('No entries selected for upgrade.')
 		return []
 
-	chosen: set[int] = set()
+	selected_entries = []
+	seen_entries = set()
 	for raw_part in response.split(','):
 		part = raw_part.strip()
 		if not part:
 			continue
-		try:
-			value = int(part)
-		except ValueError:
-			continue
-		if 1 <= value <= len(entries):
-			chosen.add(value)
 
-	selected_entries = [entry for idx, entry in enumerate(entries, start=1) if idx in chosen]
+		if part in group_map:
+			for entry in group_map[part]:
+				entry_id = id(entry)
+
+				if entry_id not in seen_entries:
+					selected_entries.append(entry)
+					seen_entries.add(entry_id)
+			continue
+
+		if part in item_map:
+			entry = item_map[part]
+			entry_id = id(entry)
+
+			if entry_id not in seen_entries:
+				selected_entries.append(entry)
+				seen_entries.add(entry_id)
+			continue
+
 	if not selected_entries:
 		logger.info('No valid entries selected for upgrade.')
 		return []
@@ -124,6 +177,13 @@ def _choose_entries_interactive(entries) -> list:
 	if len(selected_entries) != len(entries):
 		logger.info('Not selected: %s entries.', len(entries) - len(selected_entries))
 	return selected_entries
+
+
+def _choose_entries_interactive(entries, group_by: str) -> list:
+	groups = _group_entries(entries, group_by)
+	group_map, item_map = _render_grouped_entries(groups, group_by)
+	response = input('Select entries to upgrade [a=all, n=none, 1=group, 1.2=item]: ').strip().lower()
+	return _select_entries(entries, group_map, item_map, response)
 
 
 def _handle_upgrade(args: argparse.Namespace, packages: list[Package]) -> int:
@@ -143,7 +203,7 @@ def _handle_upgrade(args: argparse.Namespace, packages: list[Package]) -> int:
 		return 0
 
 	if args.interactive:
-		entries = _choose_entries_interactive(entries)
+		entries = _choose_entries_interactive(entries, args.group_by)
 		if not entries:
 			return 0
 
