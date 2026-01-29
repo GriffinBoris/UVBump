@@ -134,7 +134,10 @@ def set_newest_versions_npm(packages: list[Package], root: Path, timeout: int) -
 		package.newest_version = newest
 
 
-def collect_upgrade_entries_npm(packages: list[Package]) -> tuple[list[tuple[NpmDependencyOrigin, Package]], list[str]]:
+def collect_upgrade_entries_npm(
+	packages: list[Package],
+	include_up_to_date: bool = False,
+) -> tuple[list[tuple[NpmDependencyOrigin, Package]], list[str]]:
 	entries = []
 	skipped = []
 
@@ -149,6 +152,9 @@ def collect_upgrade_entries_npm(packages: list[Package]) -> tuple[list[tuple[Npm
 
 		if package.primary_operator is None or not package.primary_version:
 			skipped.append(f'{origin.package_json_path}: {origin.raw_spec} (unsupported npm spec)')
+			continue
+
+		if not include_up_to_date and package.primary_version == package.newest_version:
 			continue
 
 		entries.append((origin, package))
