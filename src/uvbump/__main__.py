@@ -59,6 +59,12 @@ def _build_arg_parser() -> argparse.ArgumentParser:
 		help='Interactively choose which dependencies to upgrade.',
 	)
 	parser.add_argument(
+		'--group-by',
+		choices=['workspace', 'package'],
+		default='workspace',
+		help='Grouping used in interactive mode (workspace or package).',
+	)
+	parser.add_argument(
 		'--dry-run',
 		action='store_true',
 		help='Preview upgrade changes without writing files.',
@@ -109,17 +115,18 @@ def _load_packages(args: argparse.Namespace) -> tuple[list[Package], int | None]
 	return packages, None
 
 
-def _entry_group_key(entry) -> str:
-	origin, _package = entry
+def _entry_group_key(entry, group_by: str) -> str:
+	origin, package = entry
+	if group_by == 'package':
+		return package.display_name
 	return str(getattr(origin, 'pyproject_path', None) or getattr(origin, 'package_json_path', None))
 
 
-def _group_entries(entries) -> list:
+def _group_entries(entries, group_by: str) -> list:
 	grouped_entries = {}
 	groups = []
-
 	for entry in entries:
-		group_key = _entry_group_key(entry)
+		group_key = _entry_group_key(entry, group_by)
 
 		if group_key not in grouped_entries:
 			grouped_entries[group_key] = []
@@ -129,12 +136,11 @@ def _group_entries(entries) -> list:
 	return groups
 
 
-def _render_grouped_entries(groups) -> tuple[dict, dict]:
+def _render_grouped_entries(groups, group_by: str) -> tuple[dict, dict]:
 	logger.info('')
-	logger.info('Upgradable entries:')
+	logger.info('Upgradable entries (grouped by %s):', group_by)
 	group_map = {}
 	item_map = {}
-
 	for group_index, (path, group_entries) in enumerate(groups, start=1):
 		group_key = str(group_index)
 		group_map[group_key] = group_entries
@@ -191,9 +197,9 @@ def _select_entries(entries, group_map, item_map, response) -> list:
 	return selected_entries
 
 
-def _choose_entries_interactive(entries) -> list:
-	groups = _group_entries(entries)
-	group_map, item_map = _render_grouped_entries(groups)
+def _choose_entries_interactive(entries, group_by: str) -> list:
+	groups = _group_entries(entries, group_by)
+	group_map, item_map = _render_grouped_entries(groups, group_by)
 	response = input('Select entries to upgrade [a=all, n=none, 1=group, 1.2=item]: ').strip().lower()
 	return _select_entries(entries, group_map, item_map, response)
 
@@ -215,7 +221,7 @@ def _handle_upgrade(args: argparse.Namespace, packages: list[Package]) -> int:
 		return 0
 
 	if args.interactive:
-		entries = _choose_entries_interactive(entries)
+		entries = _choose_entries_interactive(entries, args.group_by)
 		if not entries:
 			return 0
 

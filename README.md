@@ -50,7 +50,7 @@ uvbump --kind npm --root path/to/frontend
 uvbump --root . --upgrade
 
 # interactively choose upgrades (npm)
-uvbump --kind npm --root path/to/frontend --upgrade --interactive
+uvbump --kind npm --root path/to/frontend --upgrade --interactive --group-by package
 
 # preview upgrade changes without writing files
 uvbump --root . --upgrade --dry-run
@@ -63,6 +63,7 @@ Common flags:
 - `--timeout` (optional): subprocess timeout in seconds for uv/uvx/npm calls.
 - `--upgrade`: rewrite dependency versions to the newest available versions.
 - `--interactive`: pick which dependencies to upgrade.
+- `--group-by` (interactive only): `workspace` or `package` (default: `workspace`).
 - `--dry-run`: preview upgrade changes without writing files.
 - `--version`: print the current uvbump version.
 
