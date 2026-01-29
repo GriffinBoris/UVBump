@@ -20,6 +20,8 @@ uv build
 uv publish --token <pypi-token>
 ```
 
+GitHub Actions publishes on tag pushes (`v*`) using the `PYPI_TOKEN` secret.
+
 ### Run the CLI locally
 ```
 uv run python -m uvbump --root examples

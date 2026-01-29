@@ -30,6 +30,32 @@ requests                                         2.32.3                       2.
 uvbump --root /path/to/project
 ```
 
+### Install and run as a uv tool
+
+```
+uv tool install uvbump
+uvbump --root /path/to/project
+```
+
+Examples:
+
+```
+# uv workspace (default)
+uvbump --root .
+
+# npm project
+uvbump --kind npm --root path/to/frontend
+
+# upgrade all dependencies (uv)
+uvbump --root . --upgrade
+
+# interactively choose upgrades (npm)
+uvbump --kind npm --root path/to/frontend --upgrade --interactive
+
+# preview upgrade changes without writing files
+uvbump --root . --upgrade --dry-run
+```
+
 Common flags:
 
 - `--root` (optional): path to the directory that contains `pyproject.toml` or `package.json`. Defaults to the current working directory.
