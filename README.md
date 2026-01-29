@@ -1,4 +1,4 @@
-# uvbump
+# uvbump (distribution: uvbump-cli)
 
 CLI helper that inspects a uv-managed project (or workspace) and reports which
 dependencies can be bumped based on what is pinned in `pyproject.toml`, what is
@@ -8,7 +8,7 @@ PyPI.
 ## Quick start
 
 1. Install uv: https://docs.astral.sh/uv/.
-2. Install uvbump once published: `pip install uvbump` (or `uv tool install uvbump`).
+2. Install uvbump once published: `pip install uvbump-cli` (or `uv tool install uvbump-cli`).
 3. From a uv project root, run `uvbump` to print two tables:
    - **Packages out of date**: your pins lag behind the newest versions on PyPI.
    - **Packages can be bumped**: installed versions differ from the versions pinned in `pyproject.toml`.
@@ -33,7 +33,7 @@ uvbump --root /path/to/project
 ### Install and run as a uv tool
 
 ```
-uv tool install uvbump
+uv tool install uvbump-cli
 uvbump --root /path/to/project
 ```
 
