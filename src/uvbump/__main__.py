@@ -69,6 +69,11 @@ def _build_arg_parser() -> argparse.ArgumentParser:
 		action='store_true',
 		help='Preview upgrade changes without writing files.',
 	)
+	parser.add_argument(
+		'--show-up-to-date',
+		action='store_true',
+		help='Include dependencies that already match the newest version in upgrade selection.',
+	)
 	return parser
 
 
@@ -206,12 +211,12 @@ def _choose_entries_interactive(entries, group_by: str) -> list:
 
 def _handle_upgrade(args: argparse.Namespace, packages: list[Package]) -> int:
 	if args.kind == 'uv':
-		entries, skipped = collect_upgrade_entries(packages)
+		entries, skipped = collect_upgrade_entries(packages, include_up_to_date=args.show_up_to_date)
 
 		def upgrade(selected) -> tuple[int, list[str]]:
 			return upgrade_project_versions(selected, dry_run=args.dry_run)
 	else:
-		entries, skipped = collect_upgrade_entries_npm(packages)
+		entries, skipped = collect_upgrade_entries_npm(packages, include_up_to_date=args.show_up_to_date)
 
 		def upgrade(selected) -> tuple[int, list[str]]:
 			return upgrade_project_versions_npm(selected, dry_run=args.dry_run)

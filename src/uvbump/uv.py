@@ -246,7 +246,10 @@ def _get_table_node(doc, path_keys: tuple[str, ...]) -> list[str]:
 	return node
 
 
-def collect_upgrade_entries(packages: list[Package]) -> tuple[list[tuple[DependencyOrigin, Package]], list[str]]:
+def collect_upgrade_entries(
+	packages: list[Package],
+	include_up_to_date: bool = False,
+) -> tuple[list[tuple[DependencyOrigin, Package]], list[str]]:
 	entries = []
 	skipped = []
 	unsupported_operators = {'<', '<=', '!='}
@@ -265,6 +268,9 @@ def collect_upgrade_entries(packages: list[Package]) -> tuple[list[tuple[Depende
 
 		if package.primary_operator in unsupported_operators:
 			skipped.append(f'{package.origin.pyproject_path}: {package.origin.raw_spec} (unsupported operator {package.primary_operator})')
+			continue
+
+		if not include_up_to_date and package.primary_version == package.newest_version:
 			continue
 
 		entries.append((package.origin, package))

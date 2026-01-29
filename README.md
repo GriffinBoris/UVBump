@@ -65,6 +65,7 @@ Common flags:
 - `--interactive`: pick which dependencies to upgrade.
 - `--group-by` (interactive only): `workspace` or `package` (default: `workspace`).
 - `--dry-run`: preview upgrade changes without writing files.
+- `--show-up-to-date`: include dependencies that already match the newest version in upgrade selection.
 - `--version`: print the current uvbump version.
 
 The command uses `uv export` and `uvx pip index versions` under the hood for uv projects, so make sure `uv` is on your `PATH`.
