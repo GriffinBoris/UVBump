@@ -50,6 +50,7 @@ There is no test framework wired up yet (no pytest/nose/nox config). If tests ar
 - Tabs are used for indentation (ruff format config uses tabs).
 - Line length target is 300.
 - Prefer single quotes in strings (ruff format config).
+- Add logical blank lines between sections of code to improve readability.
 
 ### Imports
 - Prefer standard library imports first, then third‑party, then local.
@@ -61,6 +62,7 @@ There is no test framework wired up yet (no pytest/nose/nox config). If tests ar
 - Type hints are used but kept lightweight.
 - Prefer `str | None` over `Optional[str]`.
 - Keep type hints minimal; use primitive types where possible and only add hints that improve clarity.
+- Avoid verbose variable annotations when the initializer makes the type obvious; let the IDE infer in those cases.
 - Avoid heavy generic typing or complex protocols unless necessary.
 - Use `dataclasses` for simple data containers.
 
@@ -98,8 +100,9 @@ There is no test framework wired up yet (no pytest/nose/nox config). If tests ar
 ## Operational guidance for agents
 
 ### Living document
-- After each task, reflect on any new rules, pitfalls, or context that would help future work.
+- After each set of changes, reflect on any new rules, pitfalls, or context that would help future work.
 - Update `AGENTS.md` whenever something new should be documented (this file is a living guide).
+- Always check for new learnings like this and add them when they would reduce future mistakes.
 
 ### Edits
 - Prefer small, targeted edits over sweeping refactors.
@@ -107,6 +110,8 @@ There is no test framework wired up yet (no pytest/nose/nox config). If tests ar
 - Avoid over‑engineering; this is a small utility CLI.
 - Break logic into functions/classes when it improves clarity.
 - Prefer clear, explicit variable names (avoid single-letter names outside tight scopes).
+- Avoid unnecessary keyword-only markers (`*`) unless they provide real clarity.
+- Avoid useless code; remove dead branches, unused variables, and unused imports.
 
 ### Files to avoid touching unless needed
 - `uv.lock` (managed by uv).

@@ -3,7 +3,7 @@ version: '3'
 vars:
   IMAGE_NAME: '{{.IMAGE_NAME | default "uvbump-tests"}}'
   VERSION_ENV_DEFAULT: '{{print .TASKFILE_DIR "/examples/version.env"}}'
-  TEMPLATE_ROOT_DEFAULT: '{{print .TASKFILE_DIR "/test"}}'
+  TEMPLATE_ROOT_DEFAULT: '{{print .TASKFILE_DIR "/examples"}}'
 
 tasks:
   docker:build:

@@ -85,7 +85,7 @@ class NpmProject:
 
 
 def set_installed_versions_npm(packages: list[Package], root: Path, timeout: int) -> None:
-	package_map: dict[str, list[Package]] = {}
+	package_map = {}
 	for package in packages:
 		package_map.setdefault(package.name, []).append(package)
 	args = ['npm', 'ls', '--depth=0', '--json']
@@ -110,7 +110,7 @@ def set_installed_versions_npm(packages: list[Package], root: Path, timeout: int
 
 
 def set_newest_versions_npm(packages: list[Package], root: Path, timeout: int) -> None:
-	cache: dict[str, str | None] = {}
+	cache = {}
 	for package in packages:
 		if package.name in cache:
 			package.newest_version = cache[package.name]
@@ -134,8 +134,8 @@ def set_newest_versions_npm(packages: list[Package], root: Path, timeout: int) -
 
 
 def collect_upgrade_entries_npm(packages: list[Package]) -> tuple[list[tuple[NpmDependencyOrigin, Package]], list[str]]:
-	entries: list[tuple[NpmDependencyOrigin, Package]] = []
-	skipped: list[str] = []
+	entries = []
+	skipped = []
 
 	for package in packages:
 		origin = package.origin
@@ -154,15 +154,14 @@ def collect_upgrade_entries_npm(packages: list[Package]) -> tuple[list[tuple[Npm
 
 def upgrade_project_versions_npm(
 	entries: list[tuple[NpmDependencyOrigin, Package]],
-	*,
 	dry_run: bool = False,
 ) -> tuple[int, list[str]]:
-	updates_by_file: dict[Path, list[tuple[NpmDependencyOrigin, Package]]] = {}
+	updates_by_file = {}
 	for origin, package in entries:
 		updates_by_file.setdefault(origin.package_json_path, []).append((origin, package))
 
 	updated = 0
-	skipped: list[str] = []
+	skipped = []
 
 	for path, items in updates_by_file.items():
 		if not path.exists():

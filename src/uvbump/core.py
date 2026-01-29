@@ -71,7 +71,6 @@ def display_package_information(
 	packages: Iterable[Package],
 	logger,
 	column_widths: tuple[int, int, int, int] = (50, 30, 30, 30),
-	*,
 	require_newest_version: bool = True,
 ) -> None:
 	packages = list(packages)

@@ -14,7 +14,6 @@ from uvbump.core import (
 	DependencyOrigin,
 	Package,
 	UnknownPackageVersionSchemeError,
-	UnsupportedPackageTypeError,
 )
 
 _MIN_LINES_FOR_VERSIONS = 2
@@ -116,13 +115,6 @@ class UvProject:
 			packages.append(package)
 
 		return packages
-
-
-def validate_package_extras(packages: list[Package]) -> None:
-	extras = [p for p in packages if '[' in p.display_name]
-	if extras:
-		message = 'Extras are not supported'
-		raise UnsupportedPackageTypeError(message)
 
 
 def set_installed_versions_uv(packages: list[Package], root: Path, timeout: int) -> None:
@@ -254,8 +246,8 @@ def _get_table_node(doc, path_keys: tuple[str, ...]) -> list[str]:
 
 
 def collect_upgrade_entries(packages: list[Package]) -> tuple[list[tuple[DependencyOrigin, Package]], list[str]]:
-	entries: list[tuple[DependencyOrigin, Package]] = []
-	skipped: list[str] = []
+	entries = []
+	skipped = []
 	unsupported_operators = {'<', '<=', '!='}
 
 	for package in packages:
@@ -277,15 +269,14 @@ def collect_upgrade_entries(packages: list[Package]) -> tuple[list[tuple[Depende
 
 def upgrade_project_versions(
 	entries: list[tuple[DependencyOrigin, Package]],
-	*,
 	dry_run: bool = False,
 ) -> tuple[int, list[str]]:
-	updates_by_file: dict[Path, list[tuple[DependencyOrigin, Package]]] = {}
+	updates_by_file = {}
 	for origin, package in entries:
 		updates_by_file.setdefault(origin.pyproject_path, []).append((origin, package))
 
 	updated = 0
-	skipped: list[str] = []
+	skipped = []
 
 	for path, file_entries in updates_by_file.items():
 		if not path.exists():
