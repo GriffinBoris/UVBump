@@ -66,6 +66,12 @@ def _build_arg_parser() -> argparse.ArgumentParser:
 	return parser
 
 
+def _run_with_status(message: str, action) -> None:
+	logger.info('%s', message)
+	action()
+	logger.info('%s done', message)
+
+
 def _load_packages(args: argparse.Namespace) -> tuple[list[Package], int | None]:
 	if args.kind == 'uv':
 		project = UvProject(args.root)
@@ -75,8 +81,14 @@ def _load_packages(args: argparse.Namespace) -> tuple[list[Package], int | None]
 			logger.exception('pyproject.toml not found')
 			return [], 2
 
-		set_installed_versions_uv(packages, args.root, args.timeout)
-		set_newest_versions_uv(packages, args.timeout)
+		_run_with_status(
+			'Collecting installed versions...',
+			lambda: set_installed_versions_uv(packages, args.root, args.timeout),
+		)
+		_run_with_status(
+			'Checking newest versions...',
+			lambda: set_newest_versions_uv(packages, args.timeout),
+		)
 		return packages, None
 
 	project = NpmProject(args.root)
@@ -86,37 +98,90 @@ def _load_packages(args: argparse.Namespace) -> tuple[list[Package], int | None]
 		logger.exception('package.json not found')
 		return [], 2
 
-	set_installed_versions_npm(packages, args.root, args.timeout)
-	set_newest_versions_npm(packages, args.root, args.timeout)
+	_run_with_status(
+		'Collecting installed versions...',
+		lambda: set_installed_versions_npm(packages, args.root, args.timeout),
+	)
+	_run_with_status(
+		'Checking newest versions...',
+		lambda: set_newest_versions_npm(packages, args.root, args.timeout),
+	)
 	return packages, None
 
 
-def _choose_entries_interactive(entries) -> list:
+def _entry_group_key(entry) -> str:
+	origin, _package = entry
+	return str(getattr(origin, 'pyproject_path', None) or getattr(origin, 'package_json_path', None))
+
+
+def _group_entries(entries) -> list:
+	grouped_entries = {}
+	groups = []
+
+	for entry in entries:
+		group_key = _entry_group_key(entry)
+
+		if group_key not in grouped_entries:
+			grouped_entries[group_key] = []
+			groups.append((group_key, grouped_entries[group_key]))
+		grouped_entries[group_key].append(entry)
+
+	return groups
+
+
+def _render_grouped_entries(groups) -> tuple[dict, dict]:
 	logger.info('')
 	logger.info('Upgradable entries:')
-	for idx, (origin, package) in enumerate(entries, start=1):
-		logger.info('%s. %s (%s -> %s)', idx, package.display_name, origin.raw_spec, package.newest_version)
+	group_map = {}
+	item_map = {}
 
-	response = input('Select entries to upgrade [a=all, n=none, 1,2,3]: ').strip().lower()
+	for group_index, (path, group_entries) in enumerate(groups, start=1):
+		group_key = str(group_index)
+		group_map[group_key] = group_entries
+		logger.info('%s) %s', group_key, path)
+
+		for item_index, entry in enumerate(group_entries, start=1):
+			origin, package = entry
+			item_key = f'{group_index}.{item_index}'
+			item_map[item_key] = entry
+			logger.info('  %s) %s (%s -> %s)', item_key, package.display_name, origin.raw_spec, package.newest_version)
+
+	return group_map, item_map
+
+
+def _select_entries(entries, group_map, item_map, response) -> list:
 	if response in ('', 'a', 'all'):
 		return entries
+
 	if response in ('n', 'none'):
 		logger.info('No entries selected for upgrade.')
 		return []
 
-	chosen: set[int] = set()
+	selected_entries = []
+	seen_entries = set()
 	for raw_part in response.split(','):
 		part = raw_part.strip()
 		if not part:
 			continue
-		try:
-			value = int(part)
-		except ValueError:
-			continue
-		if 1 <= value <= len(entries):
-			chosen.add(value)
 
-	selected_entries = [entry for idx, entry in enumerate(entries, start=1) if idx in chosen]
+		if part in group_map:
+			for entry in group_map[part]:
+				entry_id = id(entry)
+
+				if entry_id not in seen_entries:
+					selected_entries.append(entry)
+					seen_entries.add(entry_id)
+			continue
+
+		if part in item_map:
+			entry = item_map[part]
+			entry_id = id(entry)
+
+			if entry_id not in seen_entries:
+				selected_entries.append(entry)
+				seen_entries.add(entry_id)
+			continue
+
 	if not selected_entries:
 		logger.info('No valid entries selected for upgrade.')
 		return []
@@ -124,6 +189,13 @@ def _choose_entries_interactive(entries) -> list:
 	if len(selected_entries) != len(entries):
 		logger.info('Not selected: %s entries.', len(entries) - len(selected_entries))
 	return selected_entries
+
+
+def _choose_entries_interactive(entries) -> list:
+	groups = _group_entries(entries)
+	group_map, item_map = _render_grouped_entries(groups)
+	response = input('Select entries to upgrade [a=all, n=none, 1=group, 1.2=item]: ').strip().lower()
+	return _select_entries(entries, group_map, item_map, response)
 
 
 def _handle_upgrade(args: argparse.Namespace, packages: list[Package]) -> int:
@@ -152,10 +224,12 @@ def _handle_upgrade(args: argparse.Namespace, packages: list[Package]) -> int:
 	logger.info('')
 	label = 'Planned' if args.dry_run else 'Updated'
 	logger.info('%s %s dependency entries.', label, updated)
+
 	if skipped:
 		logger.info('Skipped entries:')
 		for entry in skipped:
 			logger.info('- %s', entry)
+
 	return 0
 
 

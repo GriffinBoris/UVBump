@@ -115,6 +115,7 @@ def set_newest_versions_npm(packages: list[Package], root: Path, timeout: int) -
 		if package.name in cache:
 			package.newest_version = cache[package.name]
 			continue
+
 		args = ['npm', 'view', package.name, 'version']
 		try:
 			result = subprocess.run(  # noqa: S603
@@ -141,12 +142,15 @@ def collect_upgrade_entries_npm(packages: list[Package]) -> tuple[list[tuple[Npm
 		origin = package.origin
 		if not isinstance(origin, NpmDependencyOrigin):
 			continue
+
 		if not package.newest_version:
 			skipped.append(f'{origin.package_json_path}: {origin.raw_spec} (missing newest version)')
 			continue
+
 		if package.primary_operator is None or not package.primary_version:
 			skipped.append(f'{origin.package_json_path}: {origin.raw_spec} (unsupported npm spec)')
 			continue
+
 		entries.append((origin, package))
 
 	return entries, skipped
@@ -167,6 +171,7 @@ def upgrade_project_versions_npm(
 		if not path.exists():
 			skipped.append(f'{path}: file missing')
 			continue
+
 		data = json.loads(path.read_text())
 		changed = False
 
@@ -175,6 +180,7 @@ def upgrade_project_versions_npm(
 			if not isinstance(section_data, dict):
 				skipped.append(f'{path}: {origin.raw_spec} (missing section {origin.section})')
 				continue
+
 			if origin.name not in section_data:
 				skipped.append(f'{path}: {origin.raw_spec} (missing dependency)')
 				continue

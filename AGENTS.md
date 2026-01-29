@@ -53,6 +53,9 @@ There is no test framework wired up yet (no pytest/nose/nox config). If tests ar
 - Line length target is 300.
 - Prefer single quotes in strings (ruff format config).
 - Add logical blank lines between sections of code to improve readability.
+- Use blank lines to separate input normalization, guard clauses, and nested condition blocks in longer loops.
+- Add a blank line after a guard/continue in loops before the next conditional block.
+- Add a blank line before deeper nested conditionals when it improves scanability.
 
 ### Imports
 - Prefer standard library imports first, then third‑party, then local.
