@@ -19,10 +19,13 @@ classifiers = [
     "Operating System :: OS Independent",
 ]
 requires-python = ">=3.12"
-dependencies = []
+dependencies = [
+	"packaging>=24.2",
+	"tomlkit>=0.13.2",
+]
 
 [project.scripts]
-uvbump = "uvbump:main"
+uvbump = "uvbump.__main__:main"
 
 [build-system]
 requires = ["hatchling"]
@@ -73,6 +76,8 @@ ignore = [
     "ERA001", # Found commented-out code.
     "PLR0912", # Too many branches.
     "C901", # is too complex.
+	"FBT001", # Boolean-typed positional argument in function definition.
+	"FBT002", # Boolean default positional argument in function definition.
 ]
 
 [tool.ruff.lint.isort]

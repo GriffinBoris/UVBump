@@ -21,7 +21,7 @@ RUN uv pip install --system --no-cache-dir Jinja2 && \
 
 RUN chmod +x scripts/docker-entrypoint.sh
 
-ENV VERSION_ENV=/app/test/version.env
+ENV VERSION_ENV=/app/examples/version.env
 ENV ROOT_DIR=/app
 
 ENTRYPOINT ["/app/scripts/docker-entrypoint.sh"]
