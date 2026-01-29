@@ -190,6 +190,7 @@ def set_installed_versions_uv(packages: list[Package], root: Path, timeout: int)
 			version = info.get('version')
 			if not name or not version:
 				continue
+
 			for package in package_map.get(canonicalize_name(name), []):
 				package.installed_version = version
 
@@ -253,15 +254,19 @@ def collect_upgrade_entries(packages: list[Package]) -> tuple[list[tuple[Depende
 	for package in packages:
 		if not package.origin or not isinstance(package.origin, DependencyOrigin):
 			continue
+
 		if not package.newest_version:
 			skipped.append(f'{package.origin.pyproject_path}: {package.origin.raw_spec} (missing newest version)')
 			continue
+
 		if not package.primary_operator or not package.primary_version:
 			skipped.append(f'{package.origin.pyproject_path}: {package.origin.raw_spec} (no version specifier)')
 			continue
+
 		if package.primary_operator in unsupported_operators:
 			skipped.append(f'{package.origin.pyproject_path}: {package.origin.raw_spec} (unsupported operator {package.primary_operator})')
 			continue
+
 		entries.append((package.origin, package))
 
 	return entries, skipped
@@ -282,6 +287,7 @@ def upgrade_project_versions(
 		if not path.exists():
 			skipped.append(f'{path}: file missing')
 			continue
+
 		doc = parse(path.read_text())
 		changed = False
 
@@ -290,9 +296,11 @@ def upgrade_project_versions(
 			operator = package.primary_operator or ''
 			version = package.newest_version or ''
 			new_spec = _format_requirement_with_version(requirement, operator, version)
+
 			try:
 				list_node = _get_table_node(doc, origin.path_keys)
 				list_node[origin.index] = new_spec
+
 			except (KeyError, IndexError, TypeError):
 				skipped.append(f'{path}: {origin.raw_spec} (could not locate entry)')
 				continue
