@@ -19,10 +19,13 @@ classifiers = [
     "Operating System :: OS Independent",
 ]
 requires-python = ">=3.12"
-dependencies = []
+dependencies = [
+	"packaging>=24.2",
+	"tomlkit>=0.13.2",
+]
 
 [project.scripts]
-uvbump = "uvbump:main"
+uvbump = "uvbump.__main__:main"
 
 [build-system]
 requires = ["hatchling"]

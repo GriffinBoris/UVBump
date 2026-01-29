@@ -30,21 +30,30 @@ requests                                         2.32.3                       2.
 uvbump --root /path/to/project
 ```
 
-- `--root` (optional): path to the directory that contains `pyproject.toml`. Defaults to the current working directory.
-- The command uses `uv export` and `uvx pip index versions` under the hood, so make sure `uv` is on your `PATH`.
+Common flags:
+
+- `--root` (optional): path to the directory that contains `pyproject.toml` or `package.json`. Defaults to the current working directory.
+- `--kind` (optional): `uv` or `npm` (default: `uv`).
+- `--timeout` (optional): subprocess timeout in seconds for uv/uvx/npm calls.
+- `--upgrade`: rewrite dependency versions to the newest available versions.
+- `--interactive`: pick which dependencies to upgrade.
+- `--dry-run`: preview upgrade changes without writing files.
+- `--version`: print the current uvbump version.
+
+The command uses `uv export` and `uvx pip index versions` under the hood for uv projects, so make sure `uv` is on your `PATH`.
 
 ## Development
 
-- Run locally with `uv run python -m uvbump --root test` to exercise the sample workspace in `test/`.
-- Formatting/linting is not configured yet; contributions welcome.
+- Run locally with `uv run python -m uvbump --root examples` to exercise the sample workspace in `examples/`.
+- Formatting/linting is handled by ruff; run `ruff check` and `ruff format` as needed.
 
 ## Docker test harness
 
 - Build an image that prepares custom mismatched environments: `docker build -t uvbump-tests .`
 - Version scenarios are driven by Jinja templates:
-  - Edit `test/version.env` for the pin you want in `pyproject.toml.jinja` files and the install versions you want in the environment.
-  - On container start the entrypoint sources that env file, renders each `*.jinja` under `test/` into `pyproject.toml`, and installs the requested runtime packages.
-- Run a sample check: `docker run --rm -e VERSION_ENV=/app/test/version.env uvbump-tests python -m uvbump --root test`
+  - Edit `examples/version.env` for the pin you want in `pyproject.toml.jinja` files and the install versions you want in the environment.
+  - On container start the entrypoint sources that env file, renders each `*.jinja` under `examples/` into `pyproject.toml`, and installs the requested runtime packages.
+- Run a sample check: `docker run --rm -e VERSION_ENV=/app/examples/version.env uvbump-tests python -m uvbump --root examples`
 - Opt out of installs with `SKIP_INSTALL=1`, skip template rendering with `SKIP_TEMPLATE_RENDER=1`, or skip the whole version step with `SKIP_VERSION_CONFIG=1`.
 
 ## Building & publishing to PyPI

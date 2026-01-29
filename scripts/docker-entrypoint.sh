@@ -2,8 +2,8 @@
 set -euo pipefail
 
 ROOT_DIR="${ROOT_DIR:-/app}"
-ENV_FILE="${VERSION_ENV:-${ROOT_DIR}/test/version.env}"
-TEMPLATE_ROOT="${TEMPLATE_ROOT:-${ROOT_DIR}/test}"
+ENV_FILE="${VERSION_ENV:-${ROOT_DIR}/examples/version.env}"
+TEMPLATE_ROOT="${TEMPLATE_ROOT:-${ROOT_DIR}/examples}"
 
 if [[ "${SKIP_VERSION_CONFIG:-0}" != "1" ]]; then
 	if [[ -f "${ENV_FILE}" ]]; then

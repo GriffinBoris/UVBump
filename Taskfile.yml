@@ -2,7 +2,7 @@ version: '3'
 
 vars:
   IMAGE_NAME: '{{.IMAGE_NAME | default "uvbump-tests"}}'
-  VERSION_ENV_DEFAULT: '{{print .TASKFILE_DIR "/test/version.env"}}'
+  VERSION_ENV_DEFAULT: '{{print .TASKFILE_DIR "/examples/version.env"}}'
   TEMPLATE_ROOT_DEFAULT: '{{print .TASKFILE_DIR "/test"}}'
 
 tasks:
@@ -15,7 +15,7 @@ tasks:
     desc: Run uvbump against the sample workspace using the entrypoint flow.
     deps: [docker:build]
     cmds:
-      - docker run --rm -e VERSION_ENV={{.VERSION_ENV | default "/app/test/version.env"}} {{.IMAGE_NAME}} python -m uvbump --root test
+      - docker run --rm -e VERSION_ENV={{.VERSION_ENV | default "/app/examples/version.env"}} {{.IMAGE_NAME}} python -m uvbump --root examples
 
   env:render:
     desc: Render pyproject.toml files from Jinja templates using the version env file.

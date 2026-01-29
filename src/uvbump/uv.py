@@ -1,50 +1,69 @@
 import json
+import re
 import subprocess
 import sys
 import tomllib
+from dataclasses import dataclass
 from pathlib import Path
 
+from packaging.requirements import InvalidRequirement, Requirement
+from packaging.utils import canonicalize_name
+from tomlkit import parse
+
 from uvbump.core import (
+	DependencyOrigin,
 	Package,
 	UnknownPackageVersionSchemeError,
 	UnsupportedPackageTypeError,
 )
 
 _MIN_LINES_FOR_VERSIONS = 2
+_SPEC_PATTERN = re.compile(r'(~=|==|!=|<=|>=|<|>)\s*([^,]+)')
 
 
-def split_package_from_version(listing: str) -> tuple[str, str]:
-	cleaned_listing = listing.split(',')[0]
-
-	if '>=' in cleaned_listing:
-		split_by = '>='
-	elif '<=' in cleaned_listing:
-		split_by = '<='
-	elif '==' in cleaned_listing:
-		split_by = '=='
-	elif '<' in cleaned_listing:
-		split_by = '<'
-	elif '>' in cleaned_listing:
-		split_by = '>'
-	else:
-		message = f'Unknown package versioning scheme for package listing: {listing}'
-		raise UnknownPackageVersionSchemeError(message)
-
-	package_name, version = cleaned_listing.split(split_by)
-	return package_name, version
+@dataclass
+class DependencyEntry:
+	requirement: Requirement
+	raw_spec: str
+	pyproject_path: Path
+	path_keys: tuple[str, ...]
+	index: int
 
 
-def _collect_dependency_listings(data: dict) -> list[str]:
-	listings: list[str] = []
+def _extract_primary_spec(spec: str) -> tuple[str | None, str | None]:
+	base = spec.split(';', 1)[0].strip()
+	match = _SPEC_PATTERN.search(base)
+	if not match:
+		return None, None
+	return match.group(1), match.group(2).strip()
+
+
+def _parse_requirement(spec: str) -> Requirement:
+	try:
+		return Requirement(spec)
+	except InvalidRequirement as exc:
+		message = f'Unknown package versioning scheme for package listing: {spec}'
+		raise UnknownPackageVersionSchemeError(message) from exc
+
+
+def _collect_dependency_entries(data: dict, pyproject_path: Path) -> list[DependencyEntry]:
+	entries: list[DependencyEntry] = []
 	project = data.get('project', {})
-	listings.extend(project.get('dependencies', []) or [])
+	for index, spec in enumerate(project.get('dependencies', []) or []):
+		requirement = _parse_requirement(spec)
+		entries.append(DependencyEntry(requirement, spec, pyproject_path, ('project', 'dependencies'), index))
 
-	for deps in project.get('dependency-groups', {}).values():
-		listings.extend(deps or [])
-	for deps in data.get('dependency-groups', {}).values():
-		listings.extend(deps or [])
+	for group_name, deps in (project.get('dependency-groups', {}) or {}).items():
+		for index, spec in enumerate(deps or []):
+			requirement = _parse_requirement(spec)
+			entries.append(DependencyEntry(requirement, spec, pyproject_path, ('project', 'dependency-groups', group_name), index))
 
-	return listings
+	for group_name, deps in (data.get('dependency-groups', {}) or {}).items():
+		for index, spec in enumerate(deps or []):
+			requirement = _parse_requirement(spec)
+			entries.append(DependencyEntry(requirement, spec, pyproject_path, ('dependency-groups', group_name), index))
+
+	return entries
 
 
 class UvProject:
@@ -55,43 +74,61 @@ class UvProject:
 	def pyproject_path(self) -> Path:
 		return self.root_path / 'pyproject.toml'
 
-	def dependency_listings(self) -> list[str]:
+	def dependency_entries(self) -> list[DependencyEntry]:
 		if not self.pyproject_path.exists():
 			message = f'pyproject.toml not found at: {self.pyproject_path}'
 			raise FileNotFoundError(message)
 
 		root_data = tomllib.loads(self.pyproject_path.read_text())
-		listings = _collect_dependency_listings(root_data)
+		listings = _collect_dependency_entries(root_data, self.pyproject_path)
 
 		workspace = root_data.get('tool', {}).get('uv', {}).get('workspace', {})
 		for member in workspace.get('members', []) or []:
 			member_pyproject = (self.root_path / member) / 'pyproject.toml'
 			if member_pyproject.exists():
 				member_data = tomllib.loads(member_pyproject.read_text())
-				listings.extend(_collect_dependency_listings(member_data))
+				listings.extend(_collect_dependency_entries(member_data, member_pyproject))
 
-		unique: list[str] = []
-		seen: set[str] = set()
-		for item in listings:
-			if item not in seen:
-				unique.append(item)
-				seen.add(item)
-
-		return unique
+		return listings
 
 	def packages(self) -> list[Package]:
-		return [Package(*split_package_from_version(spec)) for spec in self.dependency_listings()]
+		packages: list[Package] = []
+		for entry in self.dependency_entries():
+			requirement = entry.requirement
+			operator, version = _extract_primary_spec(entry.raw_spec)
+			pinned_version = version if operator == '==' else None
+			project_version = pinned_version or (str(requirement.specifier) if requirement.specifier else '-')
+
+			package = Package(
+				name=canonicalize_name(requirement.name),
+				display_name=requirement.name,
+				project_version=project_version,
+				primary_operator=operator,
+				primary_version=version,
+				pinned_version=pinned_version,
+				origin=DependencyOrigin(
+					pyproject_path=entry.pyproject_path,
+					path_keys=entry.path_keys,
+					index=entry.index,
+					raw_spec=entry.raw_spec,
+				),
+			)
+			packages.append(package)
+
+		return packages
 
 
 def validate_package_extras(packages: list[Package]) -> None:
-	extras = [p for p in packages if '[' in p.name]
+	extras = [p for p in packages if '[' in p.display_name]
 	if extras:
 		message = 'Extras are not supported'
 		raise UnsupportedPackageTypeError(message)
 
 
 def set_installed_versions_uv(packages: list[Package], root: Path, timeout: int) -> None:
-	package_map = {p.name: p for p in packages}
+	package_map: dict[str, list[Package]] = {}
+	for package in packages:
+		package_map.setdefault(package.name, []).append(package)
 	commands = [
 		[
 			'uv',
@@ -127,8 +164,7 @@ def set_installed_versions_uv(packages: list[Package], root: Path, timeout: int)
 				continue
 
 			name, version = cleaned.split('==')
-			package = package_map.get(name)
-			if package:
+			for package in package_map.get(canonicalize_name(name), []):
 				package.installed_version = version
 
 	if any(package.installed_version for package in packages):
@@ -162,8 +198,7 @@ def set_installed_versions_uv(packages: list[Package], root: Path, timeout: int)
 			version = info.get('version')
 			if not name or not version:
 				continue
-			package = package_map.get(name)
-			if package:
+			for package in package_map.get(canonicalize_name(name), []):
 				package.installed_version = version
 
 		if any(package.installed_version for package in packages):
@@ -171,7 +206,12 @@ def set_installed_versions_uv(packages: list[Package], root: Path, timeout: int)
 
 
 def set_newest_versions_uv(packages: list[Package], timeout: int) -> None:
+	cache: dict[str, str | None] = {}
 	for package in packages:
+		if package.name in cache:
+			package.newest_version = cache[package.name]
+			continue
+
 		args = ['uvx', 'pip', 'index', 'versions', package.name]
 		try:
 			result = subprocess.run(  # noqa: S603
@@ -190,4 +230,86 @@ def set_newest_versions_uv(packages: list[Package], timeout: int) -> None:
 
 		versions = lines[1].replace('Available versions:', '').strip().split(',')
 		if versions:
-			package.newest_version = versions[0].strip()
+			newest = versions[0].strip()
+			cache[package.name] = newest
+			package.newest_version = newest
+		else:
+			cache[package.name] = None
+			package.newest_version = None
+
+
+def _format_requirement_with_version(requirement: Requirement, operator: str, version: str) -> str:
+	name = requirement.name
+	if requirement.extras:
+		name = f'{name}[{",".join(sorted(requirement.extras))}]'
+	marker = f' ; {requirement.marker}' if requirement.marker else ''
+	return f'{name}{operator}{version}{marker}'
+
+
+def _get_table_node(doc, path_keys: tuple[str, ...]) -> list[str]:
+	node = doc
+	for key in path_keys:
+		node = node[key]
+	return node
+
+
+def collect_upgrade_entries(packages: list[Package]) -> tuple[list[tuple[DependencyOrigin, Package]], list[str]]:
+	entries: list[tuple[DependencyOrigin, Package]] = []
+	skipped: list[str] = []
+	unsupported_operators = {'<', '<=', '!='}
+
+	for package in packages:
+		if not package.origin or not isinstance(package.origin, DependencyOrigin):
+			continue
+		if not package.newest_version:
+			skipped.append(f'{package.origin.pyproject_path}: {package.origin.raw_spec} (missing newest version)')
+			continue
+		if not package.primary_operator or not package.primary_version:
+			skipped.append(f'{package.origin.pyproject_path}: {package.origin.raw_spec} (no version specifier)')
+			continue
+		if package.primary_operator in unsupported_operators:
+			skipped.append(f'{package.origin.pyproject_path}: {package.origin.raw_spec} (unsupported operator {package.primary_operator})')
+			continue
+		entries.append((package.origin, package))
+
+	return entries, skipped
+
+
+def upgrade_project_versions(
+	entries: list[tuple[DependencyOrigin, Package]],
+	*,
+	dry_run: bool = False,
+) -> tuple[int, list[str]]:
+	updates_by_file: dict[Path, list[tuple[DependencyOrigin, Package]]] = {}
+	for origin, package in entries:
+		updates_by_file.setdefault(origin.pyproject_path, []).append((origin, package))
+
+	updated = 0
+	skipped: list[str] = []
+
+	for path, file_entries in updates_by_file.items():
+		if not path.exists():
+			skipped.append(f'{path}: file missing')
+			continue
+		doc = parse(path.read_text())
+		changed = False
+
+		for origin, package in file_entries:
+			requirement = _parse_requirement(origin.raw_spec)
+			operator = package.primary_operator or ''
+			version = package.newest_version or ''
+			new_spec = _format_requirement_with_version(requirement, operator, version)
+			try:
+				list_node = _get_table_node(doc, origin.path_keys)
+				list_node[origin.index] = new_spec
+			except (KeyError, IndexError, TypeError):
+				skipped.append(f'{path}: {origin.raw_spec} (could not locate entry)')
+				continue
+
+			updated += 1
+			changed = True
+
+		if changed and not dry_run:
+			path.write_text(doc.as_string())
+
+	return updated, skipped

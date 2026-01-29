@@ -1,6 +1,7 @@
 import logging
 from collections.abc import Iterable
 from dataclasses import dataclass
+from pathlib import Path
 
 
 class UnknownPackageVersionSchemeError(Exception):
@@ -19,9 +20,30 @@ def configure_logging(level: int = logging.INFO):
 @dataclass
 class Package:
 	name: str
+	display_name: str
 	project_version: str
 	installed_version: str | None = None
 	newest_version: str | None = None
+	primary_operator: str | None = None
+	primary_version: str | None = None
+	pinned_version: str | None = None
+	origin: 'DependencyOrigin | NpmDependencyOrigin | None' = None
+
+
+@dataclass
+class DependencyOrigin:
+	pyproject_path: Path
+	path_keys: tuple[str, ...]
+	index: int
+	raw_spec: str
+
+
+@dataclass
+class NpmDependencyOrigin:
+	package_json_path: Path
+	section: str
+	name: str
+	raw_spec: str
 
 
 def log_table(title: str, rows: Iterable[Package], column_widths: tuple[int, int, int, int], suggested_action: str, logger) -> None:
@@ -40,7 +62,8 @@ def log_table(title: str, rows: Iterable[Package], column_widths: tuple[int, int
 	logger.info(header)
 
 	for package in rows:
-		line = fmt(package.name, name_w) + fmt(package.installed_version, installed_w) + fmt(package.project_version, project_w) + fmt(package.newest_version, newest_w) + suggested_action
+		name = package.display_name or package.name
+		line = fmt(name, name_w) + fmt(package.installed_version, installed_w) + fmt(package.project_version, project_w) + fmt(package.newest_version, newest_w) + suggested_action
 		logger.info(line)
 
 
@@ -62,9 +85,12 @@ def display_package_information(
 	for package in packages:
 		if not package.installed_version:
 			continue
-		if package.installed_version != package.project_version:
+
+		if package.pinned_version and package.installed_version != package.pinned_version:
 			packages_can_be_bumped.append(package)
-		newest_differs = package.newest_version != package.project_version
+
+		compare_version = package.pinned_version or package.primary_version
+		newest_differs = bool(compare_version) and package.newest_version != compare_version
 		if require_newest_version:
 			newest_differs = bool(package.newest_version) and newest_differs
 		if newest_differs:
